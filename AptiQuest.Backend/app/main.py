@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.controllers.user_controller import router as user_router
 app = FastAPI(
     title="AptiQuest API",
     description="Backend API for AptiQuest",
@@ -7,6 +8,7 @@ app = FastAPI(
 )
 
 
+app.include_router(user_router)
 @app.get("/")
 def root():
     return {
