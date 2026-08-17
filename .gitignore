@@ -56,3 +56,4 @@ dkms.conf
 *.iml
 *.xml
 *.pyc
+AptiQuest.Backend/.env
