@@ -1,10 +1,15 @@
 from datetime import datetime, timedelta, timezone
 
 import jwt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from pwdlib import PasswordHash
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.database.database import get_db
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 password_hash = PasswordHash.recommended()
 
@@ -38,3 +43,50 @@ def create_access_token(
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm
     )
+
+
+def decode_access_token(token: str) -> dict:
+    return jwt.decode(
+        token,
+        settings.jwt_secret_key,
+        algorithms=[settings.jwt_algorithm]
+    )
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    from app.repositories.user_repository import UserRepository
+
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"}
+    )
+
+    try:
+        payload = decode_access_token(token)
+        user_id_str: str | None = payload.get("sub")
+
+        if user_id_str is None:
+            raise credentials_exception
+
+        user_id = int(user_id_str)
+
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError, ValueError):
+        raise credentials_exception
+
+    repository = UserRepository(db)
+    user = repository.get_by_id(user_id)
+
+    if user is None:
+        raise credentials_exception
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is inactive"
+        )
+
+    return user
