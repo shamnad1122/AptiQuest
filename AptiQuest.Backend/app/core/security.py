@@ -2,14 +2,14 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pwdlib import PasswordHash
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.database.database import get_db
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+bearer_scheme = HTTPBearer()
 
 password_hash = PasswordHash.recommended()
 
@@ -54,10 +54,12 @@ def decode_access_token(token: str) -> dict:
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db)
 ):
     from app.repositories.user_repository import UserRepository
+
+    token = credentials.credentials
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
