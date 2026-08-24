@@ -58,3 +58,4 @@ dkms.conf
 *.pyc
 AptiQuest.Backend/.env
 /AptiQuest.Backend/.freebuff
+AptiQuest.Backend/app/seed_data.py
