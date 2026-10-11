@@ -1,4 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field, AliasChoices, field_validator, model_validator
+from app.enums import DifficultyLevel, QuestionType
 
 
 class QuestionOptionCreate(BaseModel):
@@ -57,16 +58,10 @@ class QuestionCreate(BaseModel):
         min_length=1,
         max_length=10000
     )
-    question_type: str = Field(
-        default="MCQ",
-        pattern=r"^MCQ$"
-    )
+    question_type: QuestionType = QuestionType.MCQ
     explanation: str | None = None
     hint: str | None = None
-    difficulty: str = Field(
-        default="Easy",
-        pattern=r"^(Easy|Medium|Hard)$"
-    )
+    difficulty: DifficultyLevel = DifficultyLevel.EASY
     expected_time_seconds: int | None = Field(
         default=None,
         gt=0
@@ -86,9 +81,16 @@ class QuestionCreate(BaseModel):
     def normalize_optional_text(cls, value):
         return value.strip() if isinstance(value, str) else value
 
+    @field_validator("question_type")
+    @classmethod
+    def require_supported_question_type(cls, value):
+        if value != QuestionType.MCQ:
+            raise ValueError("Only MCQ questions are currently supported")
+        return value
+
     @model_validator(mode="after")
     def validate_mcq_options(self):
-        if self.question_type == "MCQ":
+        if self.question_type == QuestionType.MCQ:
             orders = [opt.option_order for opt in self.options]
             if sorted(orders) != [1, 2, 3, 4]:
                 raise ValueError(
@@ -121,16 +123,10 @@ class QuestionUpdate(BaseModel):
     question_text: str = Field(
         min_length=1
     )
-    question_type: str = Field(
-        default="MCQ",
-        pattern=r"^MCQ$"
-    )
+    question_type: QuestionType = QuestionType.MCQ
     explanation: str | None = None
     hint: str | None = None
-    difficulty: str = Field(
-        default="Easy",
-        pattern=r"^(Easy|Medium|Hard)$"
-    )
+    difficulty: DifficultyLevel = DifficultyLevel.EASY
     expected_time_seconds: int | None = Field(
         default=None,
         gt=0
@@ -140,9 +136,16 @@ class QuestionUpdate(BaseModel):
         max_length=4
     )
 
+    @field_validator("question_type")
+    @classmethod
+    def require_supported_question_type(cls, value):
+        if value != QuestionType.MCQ:
+            raise ValueError("Only MCQ questions are currently supported")
+        return value
+
     @model_validator(mode="after")
     def validate_mcq_options(self):
-        if self.question_type == "MCQ":
+        if self.question_type == QuestionType.MCQ:
             orders = [opt.option_order for opt in self.options]
             if sorted(orders) != [1, 2, 3, 4]:
                 raise ValueError(

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
 from app.database.database import get_db
+from app.enums import DifficultyLevel
 from app.models.user import User
 from app.schemas.question_schema import (
     AnswerFeedback,
@@ -52,7 +53,7 @@ def list_questions(
     offset: int = Query(default=0, ge=0),
     topic_id: int | None = Query(default=None),
     subtopic_id: int | None = Query(default=None),
-    difficulty: str | None = Query(default=None, pattern=r"^(Easy|Medium|Hard)$"),
+    difficulty: DifficultyLevel | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -62,7 +63,7 @@ def list_questions(
         page_size=limit,
         topic_id=topic_id,
         subtopic_id=subtopic_id,
-        difficulty=difficulty,
+        difficulty=difficulty.value if difficulty else None,
         offset=offset,
     )
 
@@ -70,9 +71,11 @@ def list_questions(
 @router.get("/count", response_model=int, summary="Count available practice questions")
 def count_questions(topic_id: int | None = Query(default=None),
                     subtopic_id: int | None = Query(default=None),
-                    difficulty: str | None = Query(default=None, pattern=r"^(Easy|Medium|Hard)$"),
+                    difficulty: DifficultyLevel | None = Query(default=None),
                     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return QuestionService(db).count_practice_questions(subtopic_id, topic_id, difficulty)
+    return QuestionService(db).count_practice_questions(
+        subtopic_id, topic_id, difficulty.value if difficulty else None
+    )
 
 
 @router.get(

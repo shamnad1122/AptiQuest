@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.question import Question
 from app.models.question_option import QuestionOption
 from app.models.user import User
+from app.enums import UserRole
 from app.repositories.question_repository import QuestionRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.question_schema import (
@@ -99,10 +100,10 @@ class QuestionService:
         question = Question(
             subtopic_id=data.subtopic_id,
             question_text=data.question_text,
-            question_type=data.question_type,
+            question_type=data.question_type.value,
             explanation=data.explanation,
             hint=data.hint,
-            difficulty=data.difficulty,
+            difficulty=data.difficulty.value,
             expected_time_seconds=data.expected_time_seconds,
             created_by=current_user.user_id,
             is_active=True
@@ -210,10 +211,10 @@ class QuestionService:
 
         question.subtopic_id = data.subtopic_id
         question.question_text = data.question_text
-        question.question_type = data.question_type
+        question.question_type = data.question_type.value
         question.explanation = data.explanation
         question.hint = data.hint
-        question.difficulty = data.difficulty
+        question.difficulty = data.difficulty.value
         question.expected_time_seconds = data.expected_time_seconds
 
         self.repository.delete_options_by_question(question_id)
@@ -274,7 +275,7 @@ class QuestionService:
         current_user: User
     ) -> None:
 
-        is_admin = current_user.role == "Admin"
+        is_admin = current_user.role == UserRole.ADMIN
         is_creator = (
             question.created_by is not None
             and question.created_by == current_user.user_id

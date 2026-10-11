@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.models.user import User
+from app.enums import UserRole
 from app.repositories.user_repository import UserRepository
 from app.schemas.user_schema import UserCreate
 
@@ -45,7 +46,7 @@ class UserService:
             username=user_data.username,
             email=user_data.email,
             password_hash=hashed_password,
-            role="User",
+            role=UserRole.USER.value,
             is_active=True
         )
 

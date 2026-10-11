@@ -11,6 +11,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.database import Base
+from app.enums import DifficultyLevel, QuestionType
 
 
 class Question(Base):
@@ -36,7 +37,7 @@ class Question(Base):
     question_type: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
-        default="MCQ"
+        default=QuestionType.MCQ.value
     )
 
     explanation: Mapped[str | None] = mapped_column(
@@ -52,7 +53,7 @@ class Question(Base):
     difficulty: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
-        default="Easy"
+        default=DifficultyLevel.EASY.value
     )
 
     expected_time_seconds: Mapped[int | None] = mapped_column(
