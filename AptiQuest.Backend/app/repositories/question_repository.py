@@ -106,6 +106,51 @@ class QuestionRepository:
 
         return list(self.db.scalars(statement).all())
 
+    def get_practice_questions(self, page: int = 1, page_size: int = 20,
+                               subtopic_id: int | None = None,
+                               topic_id: int | None = None,
+                               difficulty: str | None = None, offset: int | None = None) -> list[Question]:
+        statement = select(Question).options(selectinload(Question.options)).where(Question.is_active.is_(True))
+        statement = statement.where(Question.subtopic.has(
+            (SubTopic.is_active.is_(True)) & SubTopic.topic.has(Topic.is_active.is_(True))
+        ))
+        statement = self._apply_filters(statement, subtopic_id, topic_id, difficulty, is_active=True)
+        statement = statement.order_by(Question.question_id).offset(offset if offset is not None else (page - 1) * page_size).limit(page_size)
+        return list(self.db.scalars(statement).all())
+
+    def count_practice_questions(self, subtopic_id: int | None = None,
+                                 topic_id: int | None = None,
+                                 difficulty: str | None = None) -> int:
+        statement = select(func.count(Question.question_id))
+        statement = statement.where(Question.subtopic.has(
+            (SubTopic.is_active.is_(True)) & SubTopic.topic.has(Topic.is_active.is_(True))
+        ))
+        statement = self._apply_filters(statement, subtopic_id, topic_id, difficulty, is_active=True)
+        return self.db.scalar(statement) or 0
+
+    def get_option(self, question_id: int, option_id: int) -> QuestionOption | None:
+        return self.db.scalar(select(QuestionOption).where(
+            QuestionOption.question_id == question_id,
+            QuestionOption.option_id == option_id
+        ))
+
+    def get_correct_option(self, question_id: int) -> QuestionOption | None:
+        return self.db.scalar(select(QuestionOption).where(
+            QuestionOption.question_id == question_id,
+            QuestionOption.is_correct.is_(True)
+        ).order_by(QuestionOption.option_order))
+
+    def get_topics(self) -> list[Topic]:
+        return list(self.db.scalars(select(Topic).where(Topic.is_active.is_(True)).order_by(Topic.name)).all())
+
+    def get_topic(self, topic_id: int) -> Topic | None:
+        return self.db.scalar(select(Topic).where(Topic.topic_id == topic_id))
+
+    def get_subtopics(self, topic_id: int) -> list[SubTopic]:
+        return list(self.db.scalars(select(SubTopic).where(
+            SubTopic.topic_id == topic_id, SubTopic.is_active.is_(True)
+        ).order_by(SubTopic.name)).all())
+
     def soft_delete(self, question: Question) -> None:
         question.is_active = False
         self.db.flush()
@@ -129,7 +174,7 @@ class QuestionRepository:
             statement = (
                 statement.join(SubTopic)
                 .join(Topic)
-                .where(Topic.topic_id == topic_id)
+                .where(Topic.topic_id == topic_id, Topic.is_active.is_(True))
             )
 
         if difficulty is not None:

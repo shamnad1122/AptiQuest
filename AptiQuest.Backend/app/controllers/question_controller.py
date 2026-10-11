@@ -5,11 +5,15 @@ from app.core.security import get_current_user
 from app.database.database import get_db
 from app.models.user import User
 from app.schemas.question_schema import (
-    QuestionAdminResponse,
+    AnswerFeedback,
+    AnswerSubmission,
     QuestionCreate,
-    QuestionListResponse,
     QuestionResponse,
     QuestionUpdate,
+    PracticeQuestionListResponse,
+    PracticeQuestionResponse,
+    TopicResponse,
+    SubTopicResponse,
 )
 from app.services.question_service import QuestionService
 
@@ -23,7 +27,9 @@ router = APIRouter(
 @router.post(
     "",
     response_model=QuestionResponse,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a multiple-choice question",
+    description="Creates an MCQ under an active subtopic. Requires authentication. Supply exactly four unique options with orders 1–4 and exactly one correct option."
 )
 def create_question(
     question_data: QuestionCreate,
@@ -37,36 +43,41 @@ def create_question(
 
 @router.get(
     "",
-    response_model=QuestionListResponse
+    response_model=PracticeQuestionListResponse,
+    summary="Browse practice questions",
+    description="Lists active questions and options without exposing correctness or explanations."
 )
 def list_questions(
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     topic_id: int | None = Query(default=None),
     subtopic_id: int | None = Query(default=None),
-    difficulty: str | None = Query(default=None),
-    question_type: str | None = Query(default=None),
-    is_active: bool | None = Query(default=None),
-    search: str | None = Query(default=None),
+    difficulty: str | None = Query(default=None, pattern=r"^(Easy|Medium|Hard)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     service = QuestionService(db)
-    return service.list_questions(
-        page=page,
-        page_size=page_size,
+    return service.list_practice_questions(
+        page=1,
+        page_size=limit,
         topic_id=topic_id,
         subtopic_id=subtopic_id,
         difficulty=difficulty,
-        question_type=question_type,
-        is_active=is_active,
-        search=search
+        offset=offset,
     )
+
+
+@router.get("/count", response_model=int, summary="Count available practice questions")
+def count_questions(topic_id: int | None = Query(default=None),
+                    subtopic_id: int | None = Query(default=None),
+                    difficulty: str | None = Query(default=None, pattern=r"^(Easy|Medium|Hard)$"),
+                    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return QuestionService(db).count_practice_questions(subtopic_id, topic_id, difficulty)
 
 
 @router.get(
     "/{question_id}",
-    response_model=QuestionResponse
+    response_model=PracticeQuestionResponse
 )
 def get_question(
     question_id: int,
@@ -75,7 +86,27 @@ def get_question(
 ):
     service = QuestionService(db)
     question = service.get_question(question_id)
-    return QuestionResponse.model_validate(question)
+    return PracticeQuestionResponse.model_validate(question)
+
+
+@router.post("/{question_id}/submit", response_model=AnswerFeedback, summary="Submit a practice answer",
+             description="Checks the selected option on the server and returns immediate feedback. Requires authentication.")
+def submit_answer(question_id: int, body: AnswerSubmission,
+                  db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return QuestionService(db).submit_answer(question_id, body.selected_option_id)
+
+
+topics_router = APIRouter(prefix="/api/topics", tags=["Topics"])
+
+
+@topics_router.get("", response_model=list[TopicResponse], summary="List active topics")
+def list_topics(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return [TopicResponse.model_validate(t) for t in QuestionService(db).list_topics()]
+
+
+@topics_router.get("/{topic_id}/subtopics", response_model=list[SubTopicResponse], summary="List active subtopics")
+def list_subtopics(topic_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return [SubTopicResponse.model_validate(t) for t in QuestionService(db).list_subtopics(topic_id)]
 
 
 @router.put(

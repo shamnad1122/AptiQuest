@@ -15,6 +15,9 @@ from app.schemas.question_schema import (
     QuestionResponse,
     QuestionUpdate,
     QuestionOptionResponse,
+    PracticeQuestionListResponse,
+    PracticeQuestionResponse,
+    AnswerFeedback,
 )
 
 
@@ -24,6 +27,66 @@ class QuestionService:
         self.db = db
         self.repository = QuestionRepository(db)
         self.user_repository = UserRepository(db)
+
+    def list_practice_questions(self, page=1, page_size=20, subtopic_id=None,
+                                topic_id=None, difficulty=None, offset=None):
+        if subtopic_id is not None:
+            from app.models.subtopic import SubTopic
+            subtopic = self.db.get(SubTopic, subtopic_id)
+            if subtopic is None or not subtopic.is_active:
+                raise HTTPException(status_code=404, detail="Subtopic not found")
+            if topic_id is not None and topic_id != subtopic.topic_id:
+                raise HTTPException(status_code=400, detail="subtopic_id does not belong to topic_id")
+        if topic_id is not None:
+            topic = self.repository.get_topic(topic_id)
+            if topic is None or not topic.is_active:
+                raise HTTPException(status_code=404, detail="Topic not found")
+        total = self.repository.count_practice_questions(subtopic_id, topic_id, difficulty)
+        items = self.repository.get_practice_questions(page, page_size, subtopic_id, topic_id, difficulty, offset)
+        return PracticeQuestionListResponse(
+            items=[PracticeQuestionResponse.model_validate(q) for q in items], limit=page_size,
+            offset=offset if offset is not None else (page - 1) * page_size,
+            total=total, total_pages=max(1, math.ceil(total / page_size)))
+
+    def count_practice_questions(self, subtopic_id=None, topic_id=None, difficulty=None):
+        if subtopic_id is not None:
+            from app.models.subtopic import SubTopic
+            subtopic = self.db.get(SubTopic, subtopic_id)
+            if subtopic is None or not subtopic.is_active:
+                raise HTTPException(status_code=404, detail="Subtopic not found")
+            if topic_id is not None and topic_id != subtopic.topic_id:
+                raise HTTPException(status_code=400, detail="subtopic_id does not belong to topic_id")
+        if topic_id is not None:
+            topic = self.repository.get_topic(topic_id)
+            if topic is None or not topic.is_active:
+                raise HTTPException(status_code=404, detail="Topic not found")
+        return self.repository.count_practice_questions(subtopic_id, topic_id, difficulty)
+
+    def submit_answer(self, question_id: int, option_id: int):
+        question = self.repository.get_by_id_active(question_id)
+        if question is None:
+            raise HTTPException(status_code=404, detail="Question not found")
+        selected = self.repository.get_option(question_id, option_id)
+        if selected is None:
+            raise HTTPException(status_code=404, detail="Option not found for this question")
+        correct = self.repository.get_correct_option(question_id)
+        if correct is None:
+            raise HTTPException(status_code=500, detail="Question has no valid answer")
+        return AnswerFeedback(question_id=question_id, selected_option_id=option_id,
+            selected_answer=selected.option_text, is_correct=(selected.option_id == correct.option_id),
+            correct_option_id=correct.option_id, correct_answer=correct.option_text,
+            explanation=question.explanation)
+
+    def list_topics(self):
+        return self.repository.get_topics()
+
+    def list_subtopics(self, topic_id: int):
+        topic = self.repository.get_topic(topic_id)
+        if topic is None:
+            raise HTTPException(status_code=404, detail="Topic not found")
+        if not topic.is_active:
+            return []
+        return self.repository.get_subtopics(topic_id)
 
     def create_question(
         self,
@@ -194,10 +257,15 @@ class QuestionService:
         )
         subtopic = self.db.scalar(statement)
 
-        if subtopic is None:
+        if subtopic is None or not subtopic.is_active:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="SubTopic not found"
+                detail="Subtopic does not exist or is inactive"
+            )
+        if not subtopic.topic.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Subtopic belongs to an inactive topic"
             )
 
     def _check_permission(
